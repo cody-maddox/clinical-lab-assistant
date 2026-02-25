@@ -1,0 +1,14 @@
+# API keys — never commit
+.env
+
+# Copyrighted source documents
+PDFs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
