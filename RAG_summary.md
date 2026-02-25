@@ -549,14 +549,58 @@ Clinical_RAG/
 ### `app.py` — Features
 
 - **Text input + form submit** (`st.form`) — Enter key and button both trigger submission
-- **Spinner** while `route_query` executes (API calls take 2–5 seconds)
-- **Answer display** via `st.write`
-- **Retrieved sources expander** — shows source (Medline/Mayo), test name, and raw chunk text for each of the 2 reranked nodes; only shown for real RAG responses (not canned strings)
+- **Spinner** while `route_query` executes (retrieval + classification phase)
+- **Streaming responses** via `st.write_stream(response.response_gen)` — tokens appear token-by-token as the LLM generates; requires `streaming=True` on both query engines in `rag_pipeline.py`
+- **Retrieved sources expander** — shows source (Medline/Mayo), test name, and raw chunk text for each retrieved node; only shown for real RAG responses (not canned strings)
 - **Display-only conversation history** — past Q&A pairs stored in `st.session_state.history`, rendered below the current answer (newest first, current query excluded to avoid duplication); clears on page refresh
 
 ### Problems Encountered
 
 **Python version conflict:** System `streamlit` binary was linked to Python 3.9, which doesn't support the `X | None` union type syntax used in LlamaIndex's source. LlamaIndex was installed in the conda environment (Python 3.11+). Fix: install streamlit in the conda environment (`!pip install streamlit` from notebook) and run with `python -m streamlit run app.py` instead of `streamlit run`.
+
+---
+
+## Phase 13: Streamlit Community Cloud Deployment
+
+### GitHub Repository
+
+Created a new public GitHub repo (`clinical-lab-assistant`) containing the production files:
+
+```
+clinical-lab-assistant/
+├── app.py
+├── rag_pipeline.py
+├── requirements.txt
+├── chroma_db/         ← committed directly (6.7MB — small enough for git)
+├── RAG.ipynb
+├── RAG_summary.md
+├── RAG_notes.md
+└── .gitignore         ← excludes .env, PDFs/, __pycache__
+```
+
+PDFs excluded from the repo (copyrighted source documents). API key handled via Streamlit Cloud's Secrets manager (TOML format: `OPENAI_API_KEY = "sk-..."`), which injects secrets as environment variables at runtime — `load_dotenv()` becomes a no-op, but `OpenAI()` reads `OPENAI_API_KEY` from the environment automatically.
+
+### Reranker Removed for Deployment
+
+The `SentenceTransformerRerank` postprocessor was dropped from the production deployment. The `sentence-transformers` package depends on PyTorch (~750MB), which exceeded Streamlit Community Cloud's build constraints.
+
+**Changes made for deployment:**
+- Removed `SentenceTransformerRerank` import and instantiation from `rag_pipeline.py`
+- Removed `node_postprocessors=[reranker]` from both query engines
+- Reduced `similarity_top_k` from 6 to 3 (the higher top_k was chosen to give the reranker enough candidates; without it, 3 direct retrievals is equivalent)
+- Removed `llama-index-postprocessor-sbert-rerank` from `requirements.txt`
+
+**Quality impact is low** because: (1) the index is small and domain-focused (all content is lab tests — little noise for the reranker to filter), (2) metadata filtering already restricts retrieval to roughly half the index per query, and (3) adjusting top_k to 3 means the embedding similarity selects the 3 most relevant chunks directly rather than over-retrieving and reranking.
+
+### Dependency Resolution
+
+Initial `requirements.txt` pinned exact versions from the local conda environment, which had an inconsistent state: `llama-index-embeddings-openai==0.3.1` requires `llama-index-core<0.13.0`, but the local env had `llama-index-core==0.14.15`. Streamlit Cloud's resolver (uv) caught this conflict. Fix: removed version pins from all `llama-index-*` packages, letting pip resolve compatible versions together.
+
+### Live Deployment
+
+**URL:** https://clinical-lab-assistant-xd5df9urgepwfmeqrzkmpi.streamlit.app/
+
+Note: Streamlit Community Cloud free tier puts apps to sleep after inactivity. First load after a sleep period will be slow (cold start — ChromaDB index and models reload from scratch). Subsequent queries in the same session are fast.
 
 ---
 
@@ -577,12 +621,14 @@ Clinical_RAG/
 
 ## Current State
 
-- Pipeline is fully operational end-to-end: ingest → clean → chunk → embed → store → retrieve → re-rank → generate → route → UI
-- **Streamlit app:** running locally via `python -m streamlit run app.py`; answer display, source expander, display-only conversation history
+- Pipeline is fully operational end-to-end: ingest → clean → chunk → embed → store → retrieve → generate → route → UI
+- **Streamlit app:** deployed on Streamlit Community Cloud — https://clinical-lab-assistant-xd5df9urgepwfmeqrzkmpi.streamlit.app/
+- **App features:** streaming responses, source expander, display-only conversation history
 - **Corpus:** 12 lab tests (A1C, CBC, CMP, BMP, TSH, PSA, PT/INR, Liver Panel, Troponin, Microalbumin, Ferritin, CRP)
 - **Documents:** 24 LlamaIndex `Document` objects (12 tests × 2 sources)
 - **Active index:** 47 chunks (1500/300 SentenceSplitter)
-- **Re-ranking:** `cross-encoder/ms-marco-MiniLM-L-6-v2`, `similarity_top_k=6`, `top_n=2`
+- **Retrieval (deployed):** `similarity_top_k=3`, no reranker (removed for deployment due to PyTorch size constraints)
+- **Retrieval (notebook/local):** `similarity_top_k=6`, `SentenceTransformerRerank` (`cross-encoder/ms-marco-MiniLM-L-6-v2`, `top_n=2`)
 - **Prompt template:** exhaustiveness instruction, disclaimer, source citation
 - **Agent layer:** two-stage classification (intent gate + source routing) with metadata-filtered engines
 - **Latest correctness score: 4.94 / 5.0** (36-question expanded corpus eval)
@@ -598,6 +644,5 @@ Clinical_RAG/
 - **Cross-test noise within Medline partition:** Fix liver panel fasting retrieval failure — potential approaches: `test_name` metadata filter (requires query-to-test-name resolution), or smaller chunk sizes for preparation/fasting content
 - **Retrieval metrics:** `ContextRelevancyEvaluator` or `RetrieverEvaluator` to measure chunk-level retrieval quality independently of generation quality
 - **ReActAgent (future):** Once version compatibility is resolved or llama-index stabilizes, swap manual routing for a proper agent with tool-use loop — enables multi-step reasoning and easier tool addition
-- **Streamlit deployment:** Deploy to Streamlit Community Cloud for public access (requires GitHub repo + secrets management for `OPENAI_API_KEY`)
-- **Conversational memory:** `ChatMemoryBuffer` from LlamaIndex
+- **Conversational memory:** `ChatMemoryBuffer` from LlamaIndex — each query is currently stateless; follow-up questions ("what about for children?") have no context from prior answers
 - **Observability:** Track latency, token usage, retrieval success rate per query type
