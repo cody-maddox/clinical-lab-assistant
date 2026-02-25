@@ -120,7 +120,7 @@ Potential Agent responsibilities:
 - Decide when retrieval is required
 - Guardrails: Determine if query is inappropriate/dangerous?
     - Example: Am I going to die?
-- Stress that this is not medical advice and assistant is NOT replacement for a physician
+    - Stress that this is not medical advice and assistant is NOT replacement for a physician
 - Reformulate weak queries
 - Detect insufficient evidence
 - Retry retrieval when needed
