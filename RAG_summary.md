@@ -552,6 +552,7 @@ Clinical_RAG/
 - **Spinner** while `route_query` executes (retrieval + classification phase)
 - **Streaming responses** via `st.write_stream(response.response_gen)` — tokens appear token-by-token as the LLM generates; requires `streaming=True` on both query engines in `rag_pipeline.py`
 - **Retrieved sources expander** — shows source (Medline/Mayo), test name, and raw chunk text for each retrieved node; only shown for real RAG responses (not canned strings)
+- **Conversational memory** — `condense_query()` in `rag_pipeline.py` rewrites vague follow-up questions into standalone questions using the last 3 turns of history before routing; `route_query()` accepts an optional `history` parameter; `app.py` passes `st.session_state.history` on every call
 - **Display-only conversation history** — past Q&A pairs stored in `st.session_state.history`, rendered below the current answer (newest first, current query excluded to avoid duplication); clears on page refresh
 
 ### Problems Encountered
@@ -623,7 +624,7 @@ Note: Streamlit Community Cloud free tier puts apps to sleep after inactivity. F
 
 - Pipeline is fully operational end-to-end: ingest → clean → chunk → embed → store → retrieve → generate → route → UI
 - **Streamlit app:** deployed on Streamlit Community Cloud — https://clinical-lab-assistant-xd5df9urgepwfmeqrzkmpi.streamlit.app/
-- **App features:** streaming responses, source expander, display-only conversation history
+- **App features:** streaming responses, source expander, conversational memory (condense_query pattern), display-only conversation history
 - **Corpus:** 12 lab tests (A1C, CBC, CMP, BMP, TSH, PSA, PT/INR, Liver Panel, Troponin, Microalbumin, Ferritin, CRP)
 - **Documents:** 24 LlamaIndex `Document` objects (12 tests × 2 sources)
 - **Active index:** 47 chunks (1500/300 SentenceSplitter)
@@ -644,5 +645,5 @@ Note: Streamlit Community Cloud free tier puts apps to sleep after inactivity. F
 - **Cross-test noise within Medline partition:** Fix liver panel fasting retrieval failure — potential approaches: `test_name` metadata filter (requires query-to-test-name resolution), or smaller chunk sizes for preparation/fasting content
 - **Retrieval metrics:** `ContextRelevancyEvaluator` or `RetrieverEvaluator` to measure chunk-level retrieval quality independently of generation quality
 - **ReActAgent (future):** Once version compatibility is resolved or llama-index stabilizes, swap manual routing for a proper agent with tool-use loop — enables multi-step reasoning and easier tool addition
-- **Conversational memory:** `ChatMemoryBuffer` from LlamaIndex — each query is currently stateless; follow-up questions ("what about for children?") have no context from prior answers
+- **Conversational memory:** ✅ Implemented via `condense_query` pattern
 - **Observability:** Track latency, token usage, retrieval success rate per query type
