@@ -20,7 +20,6 @@ from llama_index.core.llms import ChatMessage
 from llama_index.core.vector_stores import MetadataFilters, ExactMatchFilter
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
-from llama_index.postprocessor.sbert_rerank import SentenceTransformerRerank
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
 # ---------------------------------------------------------------------------
@@ -58,15 +57,6 @@ vector_store = ChromaVectorStore(chroma_collection=collection)
 index = VectorStoreIndex.from_vector_store(vector_store)
 
 # ---------------------------------------------------------------------------
-# Reranker
-# ---------------------------------------------------------------------------
-
-reranker = SentenceTransformerRerank(
-    model="cross-encoder/ms-marco-MiniLM-L-6-v2",
-    top_n=2
-)
-
-# ---------------------------------------------------------------------------
 # Prompt template
 # ---------------------------------------------------------------------------
 
@@ -97,17 +87,14 @@ Answer: """
 # Source-specific query engines
 # ---------------------------------------------------------------------------
 
-# Streaming=True to stream responses to UI
 medline_engine = index.as_query_engine(
-    similarity_top_k=6,
-    node_postprocessors=[reranker],
+    similarity_top_k=3,
     text_qa_template=qa_template,
     filters=MetadataFilters(filters=[ExactMatchFilter(key='source', value='medline')]),
     streaming=True
 )
 mayo_engine = index.as_query_engine(
-    similarity_top_k=6,
-    node_postprocessors=[reranker],
+    similarity_top_k=3,
     text_qa_template=qa_template,
     filters=MetadataFilters(filters=[ExactMatchFilter(key='source', value='mayo')]),
     streaming=True
