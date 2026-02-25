@@ -148,6 +148,37 @@ def classify_source(query: str) -> str:
     response = Settings.llm.chat(messages)
     return response.message.content.strip().lower()
 
+
+# ---------------------------------------------------------------------------
+# Condense qeuery function
+# ---------------------------------------------------------------------------
+
+CONDENSE_PROMPT = """You are assisting a medical laboratory information assistant.
+Given a conversation history and a follow-up question, rewrite the follow-up as a 
+standalone question that contains all context needed to answer it independently — 
+including the specific lab test name and whether the question is about patient 
+education or technical lab procedures.
+
+If the question is already standalone, return it unchanged.
+
+Conversation history:
+{history}
+
+Follow-up question: {question}
+
+Standalone question:"""
+
+def condense_query(query: str, history: list) -> str:
+    if not history:
+        return query
+    history_text = "\n".join([
+        f"Q: {item['question']}\nA: {item['answer']}"
+        for item in history[-3:]  # last 3 turns only
+    ])
+    prompt = CONDENSE_PROMPT.format(history=history_text, question=query)
+    response = Settings.llm.chat([ChatMessage(role="user", content=prompt)])
+    return response.message.content.strip()
+
 # ---------------------------------------------------------------------------
 # Canned responses + router
 # ---------------------------------------------------------------------------
@@ -158,7 +189,9 @@ CANNED_RESPONSES = {
     "diagnosis_request": "I'm not able to provide a personal medical diagnosis. Please consult your healthcare provider to discuss your specific results."
 }
 
-def route_query(query: str):
+def route_query(query: str, history: list = None):
+    if history:
+        query = condense_query(query, history)
     category = classify_query(query)
     if category == "in_scope":
         source = classify_source(query)

@@ -27,7 +27,7 @@ with st.form("query_form"):
 
 if submitted and query:
     with st.spinner("Searching..."):
-        response = rag_pipeline.route_query(query)
+        response = rag_pipeline.route_query(query, history=st.session_state.history)
     if not isinstance(response, str):
         answer = st.write_stream(response.response_gen)
     else:
